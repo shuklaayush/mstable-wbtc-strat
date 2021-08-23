@@ -143,7 +143,7 @@ contract Strategy is BaseStrategy {
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 imbtcBalance = IERC20(address(vimbtc)).balanceOf(address(this)); // vimBTC-imBTC is 1:1
+        uint256 imbtcBalance = vimbtc.balanceOf(address(this)); // vimBTC-imBTC is 1:1
 
         return want.balanceOf(address(this)).add(imbtcToWant(imbtcBalance));
     }
@@ -317,8 +317,7 @@ contract Strategy is BaseStrategy {
         uint256 exchangeRate = imbtcToWant(1e18);
         uint256 vimbtcNeeded = _amount.mul(1e18).div(exchangeRate);
 
-        uint256 vimbtcBalance =
-            IERC20(address(vimbtc)).balanceOf(address(this));
+        uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
 
         if (vimbtcBalance < vimbtcNeeded) {
             vimbtcNeeded = vimbtcBalance;
@@ -363,11 +362,9 @@ contract Strategy is BaseStrategy {
     function liquidateAllPositions() internal override returns (uint256) {
         // TODO: Liquidate all positions and return the amount freed.
         // Liquidate fully into WBTC
-        uint256 vimbtcBalance =
-            IERC20(address(vimbtc)).balanceOf(address(this));
         // TODO: Redeem may fail because of basket weight limits on mStable
         // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
-        _divest(vimbtcBalance);
+        _divest(vimbtc.balanceOf(address(this)));
         // Get rewards before leaving
         _claimRewardsAndSwapToWant();
 
@@ -379,11 +376,10 @@ contract Strategy is BaseStrategy {
     function prepareMigration(address _newStrategy) internal override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
-        IERC20 vimbtcToken = IERC20(address(vimbtc));
-        vimbtcToken.safeTransfer(
-            _newStrategy,
-            vimbtcToken.balanceOf(address(this))
-        );
+        uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
+        // if (vimbtcBalance > 0) {
+        //     vimbtc.safeTransfer(_newStrategy, vimbtcBalance);
+        // }
     }
 
     // Override this to add all tokens/tokenized positions this contract manages

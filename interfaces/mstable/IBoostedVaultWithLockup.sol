@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity 0.6.12;
 
-interface IBoostedVaultWithLockup {
+import {IBoostedTokenWrapper} from "./IBoostedTokenWrapper.sol";
+
+interface IBoostedVaultWithLockup is IBoostedTokenWrapper {
     /**
      * @dev Stakes a given amount of the StakingToken for the sender
      * @param _amount Units of StakingToken

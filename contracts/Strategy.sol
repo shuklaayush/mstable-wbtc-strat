@@ -120,13 +120,6 @@ contract Strategy is BaseStrategy {
         return "Strategy-mStable-WBTC";
     }
 
-    function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 imbtcBalance = IERC20(address(vimbtc)).balanceOf(address(this)); // vimBTC-imBTC is 1:1
-        uint256 mbtcBalance = imbtcToMbtc(imbtcBalance);
-
-        return want.balanceOf(address(this)).add(mbtcToWant(mbtcBalance));
-    }
-
     function imbtcToMbtc(uint256 _tokens) public view returns (uint256) {
         if (_tokens == 0) {
             return 0;
@@ -138,8 +131,8 @@ contract Strategy is BaseStrategy {
         if (_tokens == 0) {
             return 0;
         }
-        // return mbtc.getRedeemOutput(want, _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio?
-        return _tokens; // 1:1 peg
+        // return mbtc.getRedeemOutput(address(want), _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio?
+        return _tokens.mul(10**wantDecimals).div(1e18); // 1:1 peg
     }
 
     function imbtcToWant(uint256 _tokens) public view returns (uint256) {
@@ -147,6 +140,12 @@ contract Strategy is BaseStrategy {
             return 0;
         }
         return mbtcToWant(imbtcToMbtc(_tokens));
+    }
+
+    function estimatedTotalAssets() public view override returns (uint256) {
+        uint256 imbtcBalance = IERC20(address(vimbtc)).balanceOf(address(this)); // vimBTC-imBTC is 1:1
+
+        return want.balanceOf(address(this)).add(imbtcToWant(imbtcBalance));
     }
 
     // Calculate minimum output amount expected based on given slippage
@@ -381,7 +380,7 @@ contract Strategy is BaseStrategy {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         IERC20 vimbtcToken = IERC20(address(vimbtc));
-        vimbtcToken.transfer(
+        vimbtcToken.safeTransfer(
             _newStrategy,
             vimbtcToken.balanceOf(address(this))
         );

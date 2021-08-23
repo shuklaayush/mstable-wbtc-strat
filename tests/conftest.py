@@ -45,7 +45,7 @@ def token():
 
 @pytest.fixture
 def amount(accounts, token, user):
-    amount = 10_000 * 10 ** token.decimals()
+    amount = 100 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     reserve = accounts.at("0x9ff58f4ffb29fa2266ab25e75e2a8b3503311656", force=True)
@@ -60,10 +60,10 @@ def weth():
 
 
 @pytest.fixture
-def weth_amout(user, weth):
-    weth_amout = 10 ** weth.decimals()
-    user.transfer(weth, weth_amout)
-    yield weth_amout
+def weth_amount(user, weth):
+    weth_amount = 10 ** weth.decimals()
+    user.transfer(weth, weth_amount)
+    yield weth_amount
 
 
 @pytest.fixture

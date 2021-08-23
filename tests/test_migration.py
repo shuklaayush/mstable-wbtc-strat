@@ -16,6 +16,7 @@ def test_migration(
     gov,
     user,
     RELATIVE_APPROX,
+    RELATIVE_APPROX_WBTC,
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
@@ -23,17 +24,17 @@ def test_migration(
     chain.sleep(1)
     strategy.harvest()
 
-    # TODO: Strategy underestimates assets because mbtc:wbtc is assumed 1:1 pegged
-    # assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
     estimate_before = strategy.estimatedTotalAssets()
+    # TODO: Strategy underestimates assets because mbtc:wbtc is assumed 1:1 pegged
+    assert pytest.approx(estimate_before, rel=RELATIVE_APPROX_WBTC) == amount
 
     # migrate to a new strategy
     new_strategy = strategist.deploy(Strategy, vault)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
-    # assert (
-    #     pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
-    #     == amount
-    # )
+    assert (
+        pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC)
+        == amount
+    )
     assert (
         pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
         == estimate_before

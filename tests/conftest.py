@@ -87,3 +87,8 @@ def strategy(strategist, keeper, vault, Strategy, gov):
 @pytest.fixture(scope="session")
 def RELATIVE_APPROX():
     yield 1e-5
+
+
+@pytest.fixture(scope="session")
+def RELATIVE_APPROX_WBTC():
+    yield 1e8

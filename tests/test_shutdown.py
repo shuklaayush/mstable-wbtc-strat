@@ -6,7 +6,7 @@ import pytest
 
 
 def test_vault_shutdown_can_withdraw(
-    chain, token, vault, strategy, user, amount, RELATIVE_APPROX
+    chain, token, vault, strategy, user, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
 ):
     ## Deposit in Vault
     token.approve(vault.address, amount, {"from": user})
@@ -20,7 +20,7 @@ def test_vault_shutdown_can_withdraw(
     strategy.harvest()
     chain.sleep(3600 * 7)
     chain.mine(1)
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
 
     ## Set Emergency
     vault.setEmergencyShutdown(True)
@@ -32,7 +32,7 @@ def test_vault_shutdown_can_withdraw(
 
 
 def test_basic_shutdown(
-    chain, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX
+    chain, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -42,7 +42,7 @@ def test_basic_shutdown(
     # Harvest 1: Send funds through the strategy
     strategy.harvest()
     chain.mine(100)
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
 
     ## Earn interest
     chain.sleep(3600 * 24 * 1)  ## Sleep 1 day

@@ -43,7 +43,9 @@ import {
 import {IMasset} from "../interfaces/mstable/IMasset.sol";
 import {ISaveWrapper} from "../interfaces/mstable/ISaveWrapper.sol";
 import {ISavingsContractV2} from "../interfaces/mstable/ISavingsContract.sol";
-import {IUniswapV2Router02} from "../interfaces/uniswap/IUniswapV2Router02.sol";
+import {
+    IUniswapV2Router02 as IUniswapV2Router
+} from "../interfaces/uniswap/IUniswapV2Router02.sol";
 
 contract Strategy is BaseStrategy {
     using SafeERC20 for IERC20;
@@ -73,8 +75,11 @@ contract Strategy is BaseStrategy {
         IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     // IERC20 public constant DAI_TOKEN = IERC20(0x6b175474e89094c44da98b954eedeac495271d0f); // Uni v3 pool
 
-    IUniswapV2Router02 public constant uniswapV2Router =
-        IUniswapV2Router02(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    // Uniswap routers
+    IUniswapV2Router public constant uniswapV2Router =
+        IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    // ISwapRouter public constant uniswapV3Router =
+    //     IUniswapV2Router02(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
     uint256 public constant MAX_BPS = 10000;
     uint256 public immutable wantDecimals;
@@ -127,6 +132,13 @@ contract Strategy is BaseStrategy {
         return imbtc.creditsToUnderlying(_tokens); // TODO: Check if sandwichable?
     }
 
+    function mbtcToImbtc(uint256 _tokens) public view returns (uint256) {
+        if (_tokens == 0) {
+            return 0;
+        }
+        return imbtc.underlyingToCredits(_tokens); // TODO: Check if sandwichable?
+    }
+
     function mbtcToWant(uint256 _tokens) public view returns (uint256) {
         if (_tokens == 0) {
             return 0;
@@ -135,11 +147,26 @@ contract Strategy is BaseStrategy {
         return _tokens.mul(10**wantDecimals).div(1e18); // 1:1 peg
     }
 
+    function wantToMbtc(uint256 _tokens) public view returns (uint256) {
+        if (_tokens == 0) {
+            return 0;
+        }
+        // return mbtc.getMintOutput(address(want), _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio?
+        return _tokens.mul(1e18).div(10**wantDecimals); // 1:1 peg
+    }
+
     function imbtcToWant(uint256 _tokens) public view returns (uint256) {
         if (_tokens == 0) {
             return 0;
         }
         return mbtcToWant(imbtcToMbtc(_tokens));
+    }
+
+    function wantToImbtc(uint256 _tokens) public view returns (uint256) {
+        if (_tokens == 0) {
+            return 0;
+        }
+        return wantToMbtc(mbtcToImbtc(_tokens));
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -195,7 +222,7 @@ contract Strategy is BaseStrategy {
         uint256 minWantOut;
         if (checkRewardToWantSlippage) {
             minWantOut = _calcMinAmountFromSlippage(
-                rewardToEth(rewardsAmount),
+                rewardToWant(rewardsAmount),
                 slippageRewardToWant
             );
         }
@@ -257,10 +284,21 @@ contract Strategy is BaseStrategy {
         }
     }
 
+    function _stakeImbtc(uint256 _amount) internal {
+        if (_amount > 0) {
+            vimbtc.stake(_amount);
+        }
+    }
+
+    function _unstakeVimbtc(uint256 _amount) internal {
+        if (_amount > 0) {
+            vimbtc.withdraw(_amount);
+        }
+    }
+
     function adjustPosition(uint256 _debtOutstanding) internal override {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
-        // TODO: Should I also stake excess imBTC tokens?
         uint256 wantToInvest = want.balanceOf(address(this));
         if (wantToInvest > 0) {
             saveWrapper.saveViaMint(
@@ -273,11 +311,10 @@ contract Strategy is BaseStrategy {
                 true
             );
         }
-    }
-
-    function _unstakeVimbtc(uint256 _amount) internal {
-        if (_amount > 0) {
-            vimbtc.withdraw(_amount);
+        // TODO: Should I also stake excess imBTC tokens?
+        uint256 imbtcBalance = imbtc.balanceOf(address(this));
+        if (imbtcBalance > 0) {
+            _stakeImbtc(imbtcBalance);
         }
     }
 
@@ -313,8 +350,7 @@ contract Strategy is BaseStrategy {
             return 0;
         }
         uint256 mbtcAmount = _unstakeVimbtcAndRedeemImbtc(_amount);
-        return _redeemMbtcForWant(_amount);
-        (mbtcAmount);
+        return _redeemMbtcForWant(mbtcAmount);
     }
 
     // safe to enter more than we have
@@ -325,16 +361,12 @@ contract Strategy is BaseStrategy {
         // Reference: SingleSidedCrvWBTC.sol
         uint256 wantBalanceBefore = want.balanceOf(address(this));
 
-        // let's take the amount we need if virtual price is real. Let's add the
-        uint256 exchangeRate = imbtcToWant(1e18);
-        uint256 vimbtcNeeded = _amount.mul(1e18).div(exchangeRate);
-
+        uint256 vimbtcNeeded = wantToImbtc(_amount);
         uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
-
         if (vimbtcBalance < vimbtcNeeded) {
             vimbtcNeeded = vimbtcBalance;
             //this is not loss. so we amend amount
-            _amount = vimbtcNeeded.mul(exchangeRate).div(1e18);
+            _amount = imbtcToWant(vimbtcNeeded);
         }
 
         _divest(vimbtcNeeded);

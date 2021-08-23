@@ -4,7 +4,16 @@ import pytest
 
 
 def test_operation(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
+    chain,
+    accounts,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    amount,
+    RELATIVE_APPROX,
+    RELATIVE_APPROX_WBTC,
 ):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
@@ -15,7 +24,10 @@ def test_operation(
     # harvest
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC)
+        == amount
+    )
 
     # tend()
     strategy.tend()
@@ -28,14 +40,26 @@ def test_operation(
 
 
 def test_emergency_exit(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
+    chain,
+    accounts,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    amount,
+    RELATIVE_APPROX,
+    RELATIVE_APPROX_WBTC,
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC)
+        == amount
+    )
 
     # set emergency and exit
     strategy.setEmergencyExit()
@@ -45,7 +69,16 @@ def test_emergency_exit(
 
 
 def test_profitable_harvest(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
+    chain,
+    accounts,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    amount,
+    RELATIVE_APPROX,
+    RELATIVE_APPROX_WBTC,
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -55,7 +88,10 @@ def test_profitable_harvest(
     # Harvest 1: Send funds through the strategy
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC)
+        == amount
+    )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
 
@@ -71,7 +107,16 @@ def test_profitable_harvest(
 
 
 def test_change_debt(
-    chain, gov, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, RELATIVE_APPROX_WBTC
+    chain,
+    gov,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    amount,
+    RELATIVE_APPROX,
+    RELATIVE_APPROX_WBTC,
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
@@ -81,19 +126,26 @@ def test_change_debt(
     strategy.harvest()
     half = int(amount / 2)
 
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == half
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == half
+    )
 
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == amount
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC)
+        == amount
+    )
 
     # In order to pass this tests, you will need to implement prepareReturn.
     # TODO: uncomment the following lines.
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == half
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX_WBTC) == half
+    )
 
 
 def test_sweep(gov, vault, strategy, token, user, amount, weth, weth_amount):

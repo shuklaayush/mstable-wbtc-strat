@@ -143,9 +143,14 @@ contract Strategy is BaseStrategy {
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 imbtcBalance = vimbtc.balanceOf(address(this)); // vimBTC-imBTC is 1:1
+        // TODO: Maybe also check mbtc balance
+        uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
+        uint256 imbtcBalance = imbtc.balanceOf(address(this));
 
-        return want.balanceOf(address(this)).add(imbtcToWant(imbtcBalance));
+        return
+            want.balanceOf(address(this)).add(
+                imbtcToWant(imbtcBalance.add(vimbtcBalance))
+            ); // vimBTC-imBTC is 1:1
     }
 
     // Calculate minimum output amount expected based on given slippage
@@ -255,6 +260,7 @@ contract Strategy is BaseStrategy {
     function adjustPosition(uint256 _debtOutstanding) internal override {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
+        // TODO: Should I also stake excess imBTC tokens?
         uint256 wantToInvest = want.balanceOf(address(this));
         if (wantToInvest > 0) {
             saveWrapper.saveViaMint(
@@ -269,18 +275,24 @@ contract Strategy is BaseStrategy {
         }
     }
 
-    function unstakeVimbtcAndRedeemImbtc(uint256 _amount)
+    function _unstakeVimbtc(uint256 _amount) internal {
+        if (_amount > 0) {
+            vimbtc.withdraw(_amount);
+        }
+    }
+
+    function _unstakeVimbtcAndRedeemImbtc(uint256 _amount)
         internal
         returns (uint256)
     {
         if (_amount == 0) {
             return 0;
         }
-        vimbtc.withdraw(_amount);
+        _unstakeVimbtc(_amount);
         return imbtc.redeemCredits(_amount);
     }
 
-    function redeemMbtcForWant(uint256 _amount) internal returns (uint256) {
+    function _redeemMbtcForWant(uint256 _amount) internal returns (uint256) {
         if (_amount == 0) {
             return 0;
         }
@@ -300,8 +312,8 @@ contract Strategy is BaseStrategy {
         if (_amount == 0) {
             return 0;
         }
-        uint256 mbtcAmount = unstakeVimbtcAndRedeemImbtc(_amount);
-        return redeemMbtcForWant(_amount);
+        uint256 mbtcAmount = _unstakeVimbtcAndRedeemImbtc(_amount);
+        return _redeemMbtcForWant(_amount);
         (mbtcAmount);
     }
 
@@ -377,9 +389,13 @@ contract Strategy is BaseStrategy {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
-        // if (vimbtcBalance > 0) {
-        //     vimbtc.safeTransfer(_newStrategy, vimbtcBalance);
-        // }
+        if (vimbtcBalance > 0) {
+            _unstakeVimbtc(vimbtcBalance);
+        }
+        uint256 imbtcBalance = imbtc.balanceOf(address(this));
+        if (imbtcBalance > 0) {
+            imbtc.transfer(_newStrategy, imbtcBalance);
+        }
     }
 
     // Override this to add all tokens/tokenized positions this contract manages

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity 0.6.12;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 interface ISavingsContractV1 {
     function depositInterest(uint256 _amount) external;
@@ -17,7 +17,7 @@ interface ISavingsContractV1 {
     function creditBalances(address) external view returns (uint256);
 }
 
-interface ISavingsContractV2 {
+interface ISavingsContractV2 is IERC20 {
     // DEPRECATED but still backwards compatible
     function redeem(uint256 _amount) external returns (uint256 massetReturned);
 

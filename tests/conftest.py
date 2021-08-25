@@ -92,3 +92,8 @@ def RELATIVE_APPROX():
 @pytest.fixture(scope="session")
 def RELATIVE_APPROX_WBTC():
     yield 1e8
+
+
+@pytest.fixture(autouse=True)
+def isolation(fn_isolation):
+    pass

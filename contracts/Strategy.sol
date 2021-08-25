@@ -43,6 +43,7 @@ import {
 import {IMasset} from "../interfaces/mstable/IMasset.sol";
 import {ISaveWrapper} from "../interfaces/mstable/ISaveWrapper.sol";
 import {ISavingsContractV2} from "../interfaces/mstable/ISavingsContract.sol";
+import {IStableSwap} from "../interfaces/curve/IStableSwap.sol";
 import {
     IUniswapV2Router02 as IUniswapV2Router
 } from "../interfaces/uniswap/IUniswapV2Router02.sol";
@@ -51,6 +52,8 @@ contract Strategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
+
+    // event Debug(uint256 freed, uint256 loss);
 
     // mStable
     ISaveWrapper public constant saveWrapper =
@@ -71,9 +74,13 @@ contract Strategy is BaseStrategy {
         FeedRegistryInterface(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public constant BTC = 0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB;
-    IERC20 public constant WETH_TOKEN =
+    // Tokens
+    IERC20 public constant weth =
         IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    // IERC20 public constant DAI_TOKEN = IERC20(0x6b175474e89094c44da98b954eedeac495271d0f); // Uni v3 pool
+    IERC20 public constant renbtc =
+        IERC20(0xEB4C2781e4ebA804CE9a9803C67d0893436bB27D);
+    IERC20 public constant sbtc =
+        IERC20(0xfE18be6b3Bd88A2D2A7f928d00292E7a9963CfC6);
 
     // Uniswap routers
     IUniswapV2Router public constant uniswapV2Router =
@@ -81,14 +88,20 @@ contract Strategy is BaseStrategy {
     // ISwapRouter public constant uniswapV3Router =
     //     IUniswapV2Router02(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
+    // Curve
+    IStableSwap public constant curveSbtcPool =
+        IStableSwap(0x7fC77b5c7614E1533320Ea6DDc2Eb61fa00A9714);
+
     uint256 public constant MAX_BPS = 10000;
     uint256 public immutable wantDecimals;
 
     // Should we ensure the swap will be within slippage params before performing it during normal harvest?
     bool public checkRewardToWantSlippage = true;
     uint256 public slippageRewardToWant = 2000; // 20%
+    uint256 public slippageWantToMbtc = 500; // 5%
 
-    // uint256 public slippageWantToMbtc = 2000; // 20%
+    // Should redeem only wbtc for mbtc?
+    bool public redeemOnlyWant = false;
 
     constructor(address _vault) public BaseStrategy(_vault) {
         // You can set these parameters on deployment to whatever you want
@@ -101,6 +114,11 @@ contract Strategy is BaseStrategy {
 
         want.safeApprove(address(saveWrapper), type(uint256).max);
         reward.safeApprove(address(uniswapV2Router), type(uint256).max);
+
+        // Curve
+        // TODO: Maybe move to a separate function and only run when redeemOnlyWant is false
+        renbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
+        sbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
     }
 
     function setCheckRewardToWantSlippage(bool _checkRewardToWantSlippage)
@@ -110,12 +128,27 @@ contract Strategy is BaseStrategy {
         checkRewardToWantSlippage = _checkRewardToWantSlippage;
     }
 
+    function setSlippageWantToMbtc(uint256 _slippageWantToMbtc)
+        external
+        onlyVaultManagers
+    {
+        require(_slippageWantToMbtc <= MAX_BPS);
+        slippageWantToMbtc = _slippageWantToMbtc;
+    }
+
     function setSlippageRewardToWant(uint256 _slippageRewardToWant)
         external
         onlyVaultManagers
     {
         require(_slippageRewardToWant <= MAX_BPS);
         slippageRewardToWant = _slippageRewardToWant;
+    }
+
+    function setRedeemOnlyWant(bool _redeemOnlyWant)
+        external
+        onlyVaultManagers
+    {
+        redeemOnlyWant = _redeemOnlyWant;
     }
 
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
@@ -166,7 +199,7 @@ contract Strategy is BaseStrategy {
         if (_tokens == 0) {
             return 0;
         }
-        return wantToMbtc(mbtcToImbtc(_tokens));
+        return mbtcToImbtc(wantToMbtc(_tokens));
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -198,7 +231,7 @@ contract Strategy is BaseStrategy {
         // Swap reward MTA => WETH => WBTC on Uniswap v2
         address[] memory path = new address[](3);
         path[0] = address(reward);
-        path[1] = address(WETH_TOKEN);
+        path[1] = address(weth);
         path[2] = address(want);
 
         // Swap reward => WETH => want
@@ -307,11 +340,12 @@ contract Strategy is BaseStrategy {
                 address(vimbtc),
                 address(want), // WBTC
                 wantToInvest,
-                0, // _minOut for WBTC-mBTC conversion (TODO: See if there's a way to add slippage protection here)
+                _calcMinAmountFromSlippage(wantToInvest, slippageWantToMbtc), // TODO: Added hardcoded slippage protection here
+                //       See if there's a better way to get mBTC-WBTC rate
                 true
             );
         }
-        // TODO: Should I also stake excess imBTC tokens?
+        // TODO: Added this since strategy might have imBTC after migration that needs to be staked. Should I also add mBTC stuff?
         uint256 imbtcBalance = imbtc.balanceOf(address(this));
         if (imbtcBalance > 0) {
             _stakeImbtc(imbtcBalance);
@@ -333,15 +367,32 @@ contract Strategy is BaseStrategy {
         if (_amount == 0) {
             return 0;
         }
-        // TODO: Redeem may fail because of basket weight limits on mStable
-        // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
-        return
-            mbtc.redeem(
-                address(want),
-                _amount,
-                0, // No slippage protection
-                address(this)
-            );
+        if (redeemOnlyWant) {
+            // TODO: Redeem may fail because of basket weight limits on mStable
+            // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
+            return
+                mbtc.redeem(
+                    address(want),
+                    _amount,
+                    _calcMinAmountFromSlippage(_amount, slippageWantToMbtc), // TODO: Remove hardcoded slippage protection
+                    address(this)
+                );
+        } else {
+            // Get renbtc, sbtc, wbtc from mStable and swap to wbtc on Curve
+            uint256 wantBalanceBefore = want.balanceOf(address(this));
+            uint256[] memory minOut = new uint256[](3);
+            // renbtc, sbtc, wbtc
+            uint256[] memory redeemedAmounts =
+                mbtc.redeemMasset(
+                    _amount,
+                    minOut, // TODO: No slippage protection right now. Maybe add based on basket weights?
+                    address(this)
+                );
+            // renbtc, wbtc, sbtc
+            curveSbtcPool.exchange(2, 1, redeemedAmounts[1], 0); // No slippage check
+            curveSbtcPool.exchange(0, 1, redeemedAmounts[0], 0); // No slippage check
+            return want.balanceOf(address(this)).sub(wantBalanceBefore);
+        }
     }
 
     // Divest from imbtc vault
@@ -401,6 +452,7 @@ contract Strategy is BaseStrategy {
             _amountNeeded,
             _liquidatedAmount.add(wantBalance)
         );
+        // emit Debug(_liquidatedAmount, _loss);
     }
 
     function liquidateAllPositions() internal override returns (uint256) {
@@ -420,6 +472,11 @@ contract Strategy is BaseStrategy {
     function prepareMigration(address _newStrategy) internal override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
+        // TODO: Make sure migration works for all possible scenarios where things go wrong
+        // if (harvestBeforeMigrate)
+
+        // NOTE: v-imBTC doesn't have a transfer function since it isn't ERC-20
+        //       Hence converting to imBTC to migrate
         uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
         if (vimbtcBalance > 0) {
             _unstakeVimbtc(vimbtcBalance);
@@ -452,6 +509,7 @@ contract Strategy is BaseStrategy {
         address[] memory protected = new address[](2);
         protected[0] = address(vimbtc);
         protected[1] = address(reward); // MTA
+        // TODO: Verify this?
         // protected[2] = address(imbtc);
         // protected[3] = address(mbtc);
         return protected;

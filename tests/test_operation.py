@@ -33,9 +33,10 @@ def test_operation(
     strategy.tend()
 
     # withdrawal
-    vault.withdraw({"from": user})
+    vault.withdraw(vault.balanceOf(user), user, 10, {"from": user})
     assert (
-        pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX) == user_balance_before
+        pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX_WBTC)
+        == user_balance_before
     )
 
 

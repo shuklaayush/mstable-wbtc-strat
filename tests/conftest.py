@@ -45,6 +45,7 @@ def token():
 
 @pytest.fixture
 def amount(accounts, token, user):
+    # Capping investments at 100WBTC since mStable doesn't allow depositing more (exceeds weight limits)
     amount = 100 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
@@ -64,6 +65,24 @@ def weth_amount(user, weth):
     weth_amount = 10 ** weth.decimals()
     user.transfer(weth, weth_amount)
     yield weth_amount
+
+
+@pytest.fixture
+def vimbtc():
+    token_address = "0xf38522f63f40f9dd81abafd2b8efc2ec958a3016"
+    yield Contract(token_address)
+
+
+@pytest.fixture
+def imbtc():
+    token_address = "0x17d8cbb6bce8cee970a4027d1198f6700a7a6c24"
+    yield Contract(token_address)
+
+
+@pytest.fixture
+def reward():
+    token_address = "0xa3BeD4E1c75D00fa6f4E5E6922DB7261B5E9AcD2"
+    yield Contract(token_address)
 
 
 @pytest.fixture

@@ -101,11 +101,13 @@ def test_emergency_exit(
 
 #     print(f"Vault assets: {vault.totalAssets()}")
 #     print(f"Strategy assets: {strategy.estimatedTotalAssets()}")
-#     print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0]}")
 
 #     # TODO: Add some code before harvest #2 to simulate earning yield
 #     chain.sleep(86400 * 7)  # 7 days
 #     chain.mine(1)
+
+#     print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0]}")
+#     assert vimbtc.unclaimedRewards(strategy)[0] > 0
 
 #     # Harvest 2: Realize profit
 #     strategy.harvest()
@@ -113,6 +115,8 @@ def test_emergency_exit(
 #     print(f"Vault assets: {vault.totalAssets()}")
 #     print(f"Strategy assets: {strategy.estimatedTotalAssets()}")
 #     print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0]}")
+
+#     assert vimbtc.unclaimedRewards(strategy)[0] == 0
 
 #     chain.sleep(3600 * 6)  # 6 hrs needed for profits to unlock
 #     chain.mine(1)

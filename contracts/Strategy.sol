@@ -98,10 +98,10 @@ contract Strategy is BaseStrategy {
     // Should we ensure the swap will be within slippage params before performing it during normal harvest?
     bool public checkRewardToWantSlippage = true;
     uint256 public slippageRewardToWant = 2000; // 20%
-    uint256 public slippageWantToMbtc = 500; // 5%
+    uint256 public slippageWantToMbtc = 100; // 1%
 
     // Should redeem only wbtc for mbtc?
-    bool public redeemOnlyWant = false;
+    // bool public redeemOnlyWant = true;
 
     constructor(address _vault) public BaseStrategy(_vault) {
         // You can set these parameters on deployment to whatever you want
@@ -117,8 +117,8 @@ contract Strategy is BaseStrategy {
 
         // Curve
         // TODO: Maybe move to a separate function and only run when redeemOnlyWant is false
-        renbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
-        sbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
+        // renbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
+        // sbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
     }
 
     function setCheckRewardToWantSlippage(bool _checkRewardToWantSlippage)
@@ -144,12 +144,12 @@ contract Strategy is BaseStrategy {
         slippageRewardToWant = _slippageRewardToWant;
     }
 
-    function setRedeemOnlyWant(bool _redeemOnlyWant)
-        external
-        onlyVaultManagers
-    {
-        redeemOnlyWant = _redeemOnlyWant;
-    }
+    // function setRedeemOnlyWant(bool _redeemOnlyWant)
+    //     external
+    //     onlyVaultManagers
+    // {
+    //     redeemOnlyWant = _redeemOnlyWant;
+    // }
 
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
 
@@ -340,7 +340,10 @@ contract Strategy is BaseStrategy {
                 address(vimbtc),
                 address(want), // WBTC
                 wantToInvest,
-                _calcMinAmountFromSlippage(wantToInvest, slippageWantToMbtc), // TODO: Added hardcoded slippage protection here
+                _calcMinAmountFromSlippage(
+                    wantToMbtc(wantToInvest),
+                    slippageWantToMbtc
+                ), // TODO: Added hardcoded slippage protection here
                 //       See if there's a better way to get mBTC-WBTC rate
                 true
             );
@@ -367,32 +370,34 @@ contract Strategy is BaseStrategy {
         if (_amount == 0) {
             return 0;
         }
-        if (redeemOnlyWant) {
-            // TODO: Redeem may fail because of basket weight limits on mStable
-            // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
-            return
-                mbtc.redeem(
-                    address(want),
-                    _amount,
-                    _calcMinAmountFromSlippage(_amount, slippageWantToMbtc), // TODO: Remove hardcoded slippage protection
-                    address(this)
-                );
-        } else {
-            // Get renbtc, sbtc, wbtc from mStable and swap to wbtc on Curve
-            uint256 wantBalanceBefore = want.balanceOf(address(this));
-            uint256[] memory minOut = new uint256[](3);
-            // renbtc, sbtc, wbtc
-            uint256[] memory redeemedAmounts =
-                mbtc.redeemMasset(
-                    _amount,
-                    minOut, // TODO: No slippage protection right now. Maybe add based on basket weights?
-                    address(this)
-                );
-            // renbtc, wbtc, sbtc
-            curveSbtcPool.exchange(2, 1, redeemedAmounts[1], 0); // No slippage check
-            curveSbtcPool.exchange(0, 1, redeemedAmounts[0], 0); // No slippage check
-            return want.balanceOf(address(this)).sub(wantBalanceBefore);
-        }
+        // TODO: Redeem may fail because of basket weight limits on mStable
+        // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
+        return
+            mbtc.redeem(
+                address(want),
+                _amount,
+                _calcMinAmountFromSlippage(
+                    mbtcToWant(_amount),
+                    slippageWantToMbtc
+                ), // TODO: Maybe remove hardcoded slippage protection if there's WBTC-mBTC oracle
+                address(this)
+            );
+        // } else {
+        //     // Get renbtc, sbtc, wbtc from mStable and swap to wbtc on Curve
+        //     uint256 wantBalanceBefore = want.balanceOf(address(this));
+        //     uint256[] memory minOut = new uint256[](3);
+        //     // renbtc, sbtc, wbtc
+        //     uint256[] memory redeemedAmounts =
+        //         mbtc.redeemMasset(
+        //             _amount,
+        //             minOut, // TODO: No slippage protection right now. Maybe add based on basket weights?
+        //             address(this)
+        //         );
+        //     // renbtc, wbtc, sbtc
+        //     curveSbtcPool.exchange(2, 1, redeemedAmounts[1], 0); // No slippage check
+        //     curveSbtcPool.exchange(0, 1, redeemedAmounts[0], 0); // No slippage check
+        //     return want.balanceOf(address(this)).sub(wantBalanceBefore);
+        // }
     }
 
     // Divest from imbtc vault

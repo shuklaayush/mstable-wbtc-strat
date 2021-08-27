@@ -53,7 +53,7 @@ contract Strategy is BaseStrategy {
     using Address for address;
     using SafeMath for uint256;
 
-    // event Debug(uint256 freed, uint256 loss);
+    event Debug(uint256 u1, uint256 u2);
 
     // mStable
     ISaveWrapper public constant saveWrapper =
@@ -92,13 +92,14 @@ contract Strategy is BaseStrategy {
     IStableSwap public constant curveSbtcPool =
         IStableSwap(0x7fC77b5c7614E1533320Ea6DDc2Eb61fa00A9714);
 
+    uint256 public constant WEI = 1e18;
     uint256 public constant MAX_BPS = 10000;
     uint256 public immutable wantDecimals;
 
     // Should we ensure the swap will be within slippage params before performing it during normal harvest?
-    bool public checkRewardToWantSlippage = true;
+    bool public checkSlippageRewardToWant = true;
     uint256 public slippageRewardToWant = 2000; // 20%
-    uint256 public slippageWantToMbtc = 100; // 1%
+    uint256 public slippageWantToMbtc = 48; // 0.48%
 
     // Should redeem only wbtc for mbtc?
     // bool public redeemOnlyWant = true;
@@ -122,11 +123,11 @@ contract Strategy is BaseStrategy {
         // sbtc.safeApprove(address(curveSbtcPool), type(uint256).max);
     }
 
-    function setCheckRewardToWantSlippage(bool _checkRewardToWantSlippage)
+    function setCheckSlippageRewardToWant(bool _checkSlippageRewardToWant)
         external
         onlyVaultManagers
     {
-        checkRewardToWantSlippage = _checkRewardToWantSlippage;
+        checkSlippageRewardToWant = _checkSlippageRewardToWant;
     }
 
     function setSlippageWantToMbtc(uint256 _slippageWantToMbtc)
@@ -163,44 +164,68 @@ contract Strategy is BaseStrategy {
         if (_tokens == 0) {
             return 0;
         }
-        return imbtc.creditsToUnderlying(_tokens); // TODO: Check if sandwichable?
+        return imbtc.creditsToUnderlying(_tokens); // TODO: Should be similar to cToken (non-decreasing exchange rate). Confirm to make sure not sandwichable?
     }
 
     function mbtcToImbtc(uint256 _tokens) public view returns (uint256) {
         if (_tokens == 0) {
             return 0;
         }
-        return imbtc.underlyingToCredits(_tokens); // TODO: Check if sandwichable?
+        return imbtc.underlyingToCredits(_tokens); // TODO: Should be similar to cToken (non-decreasing exchange rate). Confirm to make sure not sandwichable?
     }
 
-    function mbtcToWant(uint256 _tokens) public view returns (uint256) {
+    function mbtcToWant(uint256 _tokens, bool _considerFee)
+        public
+        view
+        returns (uint256)
+    {
         if (_tokens == 0) {
             return 0;
         }
-        // return mbtc.getRedeemOutput(address(want), _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio?
-        return _tokens.mul(10**wantDecimals).div(1e18); // 1:1 peg
+        // return mbtc.getRedeemOutput(address(want), _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio? This takes into account the swap fee
+        uint256 tokensOut = _tokens.mul(10**wantDecimals).div(1e18); // 1:1 peg
+        if (_considerFee) {
+            tokensOut = tokensOut.mul(WEI.sub(mbtc.swapFee())).div(WEI);
+        }
+        return tokensOut;
     }
 
-    function wantToMbtc(uint256 _tokens) public view returns (uint256) {
+    function wantToMbtc(uint256 _tokens, bool _considerFee)
+        public
+        view
+        returns (uint256)
+    {
         if (_tokens == 0) {
             return 0;
         }
         // return mbtc.getMintOutput(address(want), _tokens); // TODO: Check if sandwichable? Maybe use 1: 1 ratio?
-        return _tokens.mul(1e18).div(10**wantDecimals); // 1:1 peg
+        uint256 tokensOut = _tokens.mul(1e18).div(10**wantDecimals); // 1:1 peg
+        if (_considerFee) {
+            tokensOut = tokensOut.mul(WEI).div(WEI.sub(mbtc.swapFee()));
+        }
+        return tokensOut; // 1:1 peg
     }
 
-    function imbtcToWant(uint256 _tokens) public view returns (uint256) {
+    function imbtcToWant(uint256 _tokens, bool _considerFee)
+        public
+        view
+        returns (uint256)
+    {
         if (_tokens == 0) {
             return 0;
         }
-        return mbtcToWant(imbtcToMbtc(_tokens));
+        return mbtcToWant(imbtcToMbtc(_tokens), _considerFee);
     }
 
-    function wantToImbtc(uint256 _tokens) public view returns (uint256) {
+    function wantToImbtc(uint256 _tokens, bool _considerFee)
+        public
+        view
+        returns (uint256)
+    {
         if (_tokens == 0) {
             return 0;
         }
-        return mbtcToImbtc(wantToMbtc(_tokens));
+        return mbtcToImbtc(wantToMbtc(_tokens, _considerFee));
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -210,7 +235,7 @@ contract Strategy is BaseStrategy {
 
         return
             want.balanceOf(address(this)).add(
-                imbtcToWant(imbtcBalance.add(vimbtcBalance))
+                imbtcToWant(imbtcBalance.add(vimbtcBalance), true)
             ); // vimBTC-imBTC is 1:1
     }
 
@@ -254,7 +279,7 @@ contract Strategy is BaseStrategy {
         }
 
         uint256 minWantOut;
-        if (checkRewardToWantSlippage) {
+        if (checkSlippageRewardToWant) {
             minWantOut = _calcMinAmountFromSlippage(
                 rewardToWant(rewardsAmount),
                 slippageRewardToWant
@@ -286,6 +311,7 @@ contract Strategy is BaseStrategy {
         uint256 wantBalance = want.balanceOf(address(this));
 
         if (debt < currentValue) {
+            // Note: This'll report a loss
             _profit = currentValue.sub(debt);
         } else {
             _loss = debt.sub(currentValue);
@@ -341,7 +367,7 @@ contract Strategy is BaseStrategy {
                 address(want), // WBTC
                 wantToInvest,
                 _calcMinAmountFromSlippage(
-                    wantToMbtc(wantToInvest),
+                    wantToMbtc(wantToInvest, false),
                     slippageWantToMbtc
                 ), // TODO: Added hardcoded slippage protection here
                 //       See if there's a better way to get mBTC-WBTC rate
@@ -373,16 +399,18 @@ contract Strategy is BaseStrategy {
         // TODO: Redeem may fail because of basket weight limits on mStable
         // (https://docs.mstable.org/mstable-assets/mstable-app/forge/minting-and-redemption#the-basic-process-of-redeeming-a-masset)
         return
+            // NOTE: Keep in mind there's a fee of 0.02% on single asset redemption,
             mbtc.redeem(
                 address(want),
                 _amount,
                 _calcMinAmountFromSlippage(
-                    mbtcToWant(_amount),
+                    mbtcToWant(_amount, true),
                     slippageWantToMbtc
                 ), // TODO: Maybe remove hardcoded slippage protection if there's WBTC-mBTC oracle
                 address(this)
             );
         // } else {
+        //     // NOTE: Keep in mind there's a fee of 0.06% on multi asset proportional redemption
         //     // Get renbtc, sbtc, wbtc from mStable and swap to wbtc on Curve
         //     uint256 wantBalanceBefore = want.balanceOf(address(this));
         //     uint256[] memory minOut = new uint256[](3);
@@ -417,12 +445,15 @@ contract Strategy is BaseStrategy {
         // Reference: SingleSidedCrvWBTC.sol
         uint256 wantBalanceBefore = want.balanceOf(address(this));
 
-        uint256 vimbtcNeeded = wantToImbtc(_amount);
+        uint256 vimbtcNeeded = wantToImbtc(_amount, true);
         uint256 vimbtcBalance = vimbtc.balanceOf(address(this));
+
+        emit Debug(_amount, vimbtcNeeded);
+
         if (vimbtcBalance < vimbtcNeeded) {
             vimbtcNeeded = vimbtcBalance;
             //this is not loss. so we amend amount
-            _amount = imbtcToWant(vimbtcNeeded);
+            // _amount = imbtcToWant(vimbtcNeeded, true); // TODO: This is not the actual exchange rate. Why do we need this?
         }
 
         _divest(vimbtcNeeded);

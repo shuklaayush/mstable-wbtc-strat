@@ -5,6 +5,9 @@ pragma experimental ABIEncoderV2;
 import {BassetData, BassetPersonal} from "./masset/MassetStructs.sol";
 
 abstract contract IMasset {
+    // View
+    function swapFee() external view virtual returns (uint256);
+
     // Mint
     function mint(
         address _input,

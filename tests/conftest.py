@@ -80,6 +80,12 @@ def imbtc():
 
 
 @pytest.fixture
+def mbtc():
+    token_address = "0x945facb997494cc2570096c74b5f66a3507330a1"
+    yield Contract(token_address)
+
+
+@pytest.fixture
 def reward():
     token_address = "0xa3BeD4E1c75D00fa6f4E5E6922DB7261B5E9AcD2"
     yield Contract(token_address)
@@ -105,12 +111,7 @@ def strategy(strategist, keeper, vault, Strategy, gov):
 
 @pytest.fixture(scope="session")
 def RELATIVE_APPROX():
-    yield 1e-5
-
-
-@pytest.fixture(scope="session")
-def RELATIVE_APPROX_WBTC():
-    yield 1e8
+    yield 50e-4  # 0.48% max slippage (from strategy) + 0.02% redemption fee on mBTC
 
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,5 @@
 import pytest
-from brownie import config, Contract
+from brownie import config, Contract, Wei
 
 
 @pytest.fixture
@@ -89,6 +89,40 @@ def mbtc():
 def reward():
     token_address = "0xa3BeD4E1c75D00fa6f4E5E6922DB7261B5E9AcD2"
     yield Contract(token_address)
+
+
+@pytest.fixture
+def rewards_keeper(reward, accounts):
+    # Transfer MTA to rewards keeper
+    account_address = "0xB81473F20818225302B8FFFB905B53D58A793D84"
+    rewards_whale = "0x3dd46846eed8D147841AE162C8425c08BD8E1b41"
+    reward.transfer(account_address, Wei("300000 ether"), {"from": rewards_whale})
+    yield accounts.at(account_address, force=True)
+
+
+@pytest.fixture
+def rewards_distributor():
+    contract_address = "0x04dfDfa471b79cc9E6E8C355e6C71F8eC4916C50"
+    yield Contract(contract_address)
+
+
+@pytest.fixture
+def sleep_wrapper(chain, rewards_distributor, rewards_keeper, vimbtc):
+    def f(t):
+        while t > 0:
+            reward_period_left = vimbtc.periodFinish() - chain.time()
+            # Add pending MTA rewards
+            if t > reward_period_left:
+                chain.sleep(vimbtc.periodFinish() - chain.time())
+                rewards_distributor.distributeRewards(
+                    [vimbtc], [Wei("7000 ether")], {"from": rewards_keeper}
+                )
+            else:
+                chain.sleep(t)
+            t -= min(t, reward_period_left)
+            chain.mine(1)
+
+    yield f
 
 
 @pytest.fixture

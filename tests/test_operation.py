@@ -17,7 +17,7 @@ def test_operation(
 ):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
-    print(f"User balance before: {token.balanceOf(user) / 10 ** token.decimals()}")
+    print(f"User balance (before): {token.balanceOf(user) / 10 ** token.decimals()}")
 
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
@@ -31,12 +31,13 @@ def test_operation(
     # tend()
     strategy.tend()
 
-    print(f"Strategy vimbtc: {vimbtc.balanceOf(strategy)}")
-
     # withdrawal
     vault.withdraw(vault.balanceOf(user), user, 10, {"from": user})
 
-    print(f"User balance: {token.balanceOf(user) / 10 ** token.decimals()}")
+    # Strategy should be empty since we're withdrawing everything
+    assert strategy.estimatedTotalAssets() == 0
+
+    print(f"User balance (after): {token.balanceOf(user) / 10 ** token.decimals()}")
     assert (
         pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX) == user_balance_before
     )

@@ -11,7 +11,7 @@ imBTC --> Add to vault to get v-imBTC
 
 Withdraw:
 v-imBTC --> imBTC (1: 1) => No sandwich
-imBTC --> mBTC (creditsToUnderlying(amount) / balanceOfUnderlying(address)) => Doesn't look sandwichable since exchange rate changes are mostly permissioned
+imBTC --> mBTC (creditsToUnderlying(amount) / balanceOfUnderlying(address)) => Doesn't look sandwichable since exchange rate is non-decreasing
 mBTC --> WBTC (getRedeemOutput(want, amount)) => 1: 1
 */
 
@@ -475,6 +475,7 @@ contract Strategy is BaseStrategy {
     {
         // NOTE: Maintain invariant `_liquidatedAmount + _loss <= _amountNeeded`
         // Reference: SingleSidedCrvWBTC.sol
+        emit Debug(_amountNeeded, 0);
 
         uint256 wantBalance = want.balanceOf(address(this));
         if (wantBalance < _amountNeeded) {
@@ -486,7 +487,7 @@ contract Strategy is BaseStrategy {
             _amountNeeded,
             _liquidatedAmount.add(wantBalance)
         );
-        // emit Debug(_liquidatedAmount, _loss);
+        emit Debug(_liquidatedAmount, _loss);
     }
 
     function liquidateAllPositions() internal override returns (uint256) {

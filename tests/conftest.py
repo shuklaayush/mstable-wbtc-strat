@@ -107,7 +107,7 @@ def rewards_distributor():
 
 
 @pytest.fixture
-def sleep_wrapper(chain, rewards_distributor, rewards_keeper, vimbtc):
+def sleep_and_topup_rewards(chain, rewards_distributor, rewards_keeper, vimbtc):
     def f(t):
         while t > 0:
             reward_period_left = vimbtc.periodFinish() - chain.time()

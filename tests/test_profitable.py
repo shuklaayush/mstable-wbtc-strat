@@ -26,7 +26,7 @@ def test_profitable_harvest(
     amount,
     RELATIVE_APPROX,
     vimbtc,
-    sleep_wrapper,
+    sleep_and_topup_rewards,
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -48,7 +48,7 @@ def test_profitable_harvest(
     )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    sleep_wrapper(weeks(12))
+    sleep_and_topup_rewards(weeks(12))
 
     print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0] / 1e18}")
     assert vimbtc.unclaimedRewards(strategy)[0] > 0

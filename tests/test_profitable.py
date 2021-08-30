@@ -3,16 +3,8 @@ from brownie import Contract, Wei
 import pytest
 
 
-def hours(x):
-    return x * 3600
-
-
-def days(x):
-    return 24 * hours(x)
-
-
 def weeks(x):
-    return 7 * days(x)
+    return 7 * 24 * 3600 * x
 
 
 def test_profitable_harvest(
@@ -23,12 +15,17 @@ def test_profitable_harvest(
     strategy,
     user,
     strategist,
+    gov,
     amount,
     RELATIVE_APPROX,
     vimbtc,
     sleep_and_topup_rewards,
 ):
+    # Set management fee to 0
+    vault.setManagementFee(0, {"from": gov})
+
     # Deposit to the vault
+    print(f"User balance (before): {token.balanceOf(user) / 10 ** token.decimals()}")
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
     assert token.balanceOf(vault.address) == amount
@@ -48,7 +45,7 @@ def test_profitable_harvest(
     )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    sleep_and_topup_rewards(weeks(12))
+    sleep_and_topup_rewards(weeks(10))
 
     print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0] / 1e18}")
     assert vimbtc.unclaimedRewards(strategy)[0] > 0
@@ -60,7 +57,6 @@ def test_profitable_harvest(
     print(
         f"Strategy assets: {strategy.estimatedTotalAssets() / 10 ** token.decimals()}"
     )
-    print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0] / 1e18}")
     assert vimbtc.unclaimedRewards(strategy)[0] == 0
 
     chain.sleep(3600 * 6)  # 6 hrs needed for profits to unlock
@@ -69,11 +65,10 @@ def test_profitable_harvest(
 
     # TODO: Uncomment the lines below
     assert vault.totalAssets() > before_total
-    # assert vault.pricePerShare() > before_pps
+    assert vault.pricePerShare() > before_pps
     assert strategy.estimatedTotalAssets() + profit > amount
-
-    # assert False
 
     # User must make profit
     vault.withdraw(amount, {"from": user})
     assert token.balanceOf(user) > amount
+    print(f"User balance (after): {token.balanceOf(user) / 10 ** token.decimals()}")

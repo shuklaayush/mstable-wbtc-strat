@@ -3,8 +3,12 @@ from brownie import Contract, Wei
 import pytest
 
 
+def days(x):
+    return 24 * 3600 * x
+
+
 def weeks(x):
-    return 7 * 24 * 3600 * x
+    return 7 * days(x)
 
 
 def test_profitable_harvest(
@@ -45,13 +49,21 @@ def test_profitable_harvest(
     )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    sleep_and_topup_rewards(weeks(10))
+    num_days = 360
+    harvest_freq_days = 3
+    for i in range(0, num_days, harvest_freq_days):
+        sleep_and_topup_rewards(days(harvest_freq_days))
+        # print(f"Unclaimed rewards (day {i + harvest_freq_days}): {vimbtc.unclaimedRewards(strategy)[0] / 1e18}")
+        assert vimbtc.unclaimedRewards(strategy)[0] > 0
 
-    print(f"Unclaimed rewards: {vimbtc.unclaimedRewards(strategy)[0] / 1e18}")
-    assert vimbtc.unclaimedRewards(strategy)[0] > 0
-
-    # Harvest 2: Realize profit
-    strategy.harvest()
+        # Harvest 2: Realize profit
+        strategy.harvest()
+        # print(
+        #     f"Strategy vimbtc: {vimbtc.balanceOf(strategy) / 1e18}"
+        # )
+        # print(
+        #     f"Strategy assets: {strategy.estimatedTotalAssets() / 10 ** token.decimals()}"
+        # )
 
     print(f"Vault assets: {vault.totalAssets() / 10 ** token.decimals()}")
     print(
@@ -68,7 +80,16 @@ def test_profitable_harvest(
     assert vault.pricePerShare() > before_pps
     assert strategy.estimatedTotalAssets() + profit > amount
 
+    print(
+        f"\nEstimated APR (after {num_days} days): ",
+        "{:.2%}".format(
+            (days(365.25) / days(num_days))
+            * (vault.totalAssets() - before_total)
+            / before_total
+        ),
+    )
+
     # User must make profit
     vault.withdraw(amount, {"from": user})
     assert token.balanceOf(user) > amount
-    print(f"User balance (after): {token.balanceOf(user) / 10 ** token.decimals()}")
+    print(f"User balance (after): {token.balanceOf(user) / 10 ** token.decimals()}\n")

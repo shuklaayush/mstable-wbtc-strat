@@ -249,7 +249,8 @@ contract Strategy is BaseStrategy {
     }
 
     function _claimRewards() internal {
-        vimbtc.claimRewards(0, 0);
+        // Claim both unlocked and locked rewards
+        vimbtc.claimRewards();
     }
 
     function _swapRewardToWant(uint256 amountIn, uint256 minOut) internal {

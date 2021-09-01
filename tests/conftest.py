@@ -45,8 +45,8 @@ def token():
 
 @pytest.fixture
 def amount(accounts, token, user):
-    # Capping investments at 100WBTC since mStable doesn't allow depositing more (exceeds weight limits)
-    amount = 100 * (10 ** token.decimals())
+    # Capping investments at 50WBTC since mStable doesn't allow depositing a lot more (exceeds weight limits)
+    amount = 50 * (10 ** token.decimals())
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
     reserve = accounts.at("0x9ff58f4ffb29fa2266ab25e75e2a8b3503311656", force=True)
@@ -96,7 +96,7 @@ def rewards_keeper(reward, accounts):
     # Transfer MTA to rewards keeper
     account_address = "0xB81473F20818225302B8FFFB905B53D58A793D84"
     rewards_whale = "0x3dd46846eed8D147841AE162C8425c08BD8E1b41"
-    reward.transfer(account_address, Wei("300000 ether"), {"from": rewards_whale})
+    reward.transfer(account_address, Wei("3000000 ether"), {"from": rewards_whale})
     yield accounts.at(account_address, force=True)
 
 
@@ -115,7 +115,7 @@ def sleep_and_topup_rewards(chain, rewards_distributor, rewards_keeper, vimbtc):
             if t > reward_period_left:
                 chain.sleep(vimbtc.periodFinish() - chain.time())
                 rewards_distributor.distributeRewards(
-                    [vimbtc], [Wei("7333 ether")], {"from": rewards_keeper}
+                    [vimbtc], [Wei("7500 ether")], {"from": rewards_keeper}
                 )
             else:
                 chain.sleep(t)
